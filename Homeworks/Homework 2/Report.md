@@ -104,11 +104,19 @@ Velocity (m/s) was measured every second over 30 seconds:
 
 $$v = [30, 35, 33, 32, 34, 37, 39, 38, 36, 36, 37, 39, 42, 45, 45, 41, 40, 39, 42, 44, 47, 49, 50, 49, 46, 48, 50, 53, 55, 54, 53]$$
 
-The data has two visible features: a gradual **upward trend** and a **oscillatory component**. The model is
+The data has two visible features: a gradual **upward trend** and an **oscillatory component**. The model is
 
 $$f(t) = A\cos(Bt) + Ct + D$$
 
 which captures both: $Ct + D$ is the linear drift and $A\cos(Bt)$ is the oscillation.
+
+### Optimization Method — `scipy.optimize.fmin`
+
+As suggested in the assignment, the parameters are found using **`scipy.optimize.fmin`** (Nelder–Mead simplex method) rather than `curve_fit`. The optimizer minimises the sum of squared residuals
+
+$$\text{SSR}(\mathbf{p}) = \sum_{i=0}^{30}\bigl(v_i - f(t_i;\,\mathbf{p})\bigr)^2$$
+
+by direct function evaluation — no gradient information is required. This makes `fmin` more robust to rough or multi-modal cost landscapes but more sensitive to the starting point.
 
 ---
 
@@ -123,13 +131,13 @@ Following the same reasoning as Exercise I, the initial guesses were derived fro
 | $C$ | Vertical centre ≈ $(55+30)/2$ | $42.5$ |
 | $D$ | Linear growth starts near 0 | $0$ |
 
-**Fitted parameters:**
+**Fitted parameters (fmin):**
 
-$$A = 1.93, \quad B = 0.1346, \quad C = 0.879, \quad D = 29.68$$
+$$A = 31.51, \quad B \approx 0, \quad C = 0.732, \quad D = 0.027$$
 
-$$E_2^{\text{physics}} = 11.98$$
+$$E_2^{\text{physics}} = 12.31$$
 
-The optimizer converged but to a solution dominated by a slow cosine wave, essentially absorbing the trend into the cosine rather than the $Ct + D$ component. The **physics-inspired guesses were too large** for the amplitude — the velocity oscillation is much smaller than the full data range, and the initial $A = 12.5$ steered the optimizer to the wrong local minimum.
+`fmin` converged to a degenerate solution: with $B \approx 0$ the cosine term is essentially flat, so the model reduces to a nearly pure linear fit. The **physics-inspired amplitude guess of 12.5** is far from the true oscillation amplitude, and the large $C = 42.5$ guess pulls the simplex into a valley where the cosine contribution is negligible.
 
 ---
 
@@ -137,15 +145,15 @@ The optimizer converged but to a solution dominated by a slow cosine wave, essen
 
 The assignment specifies: $A = 3$, $B = \pi/4$, $C = 2/3$, $D = 32$.
 
-**Fitted parameters:**
+**Fitted parameters (fmin):**
 
-$$A = -1.91, \quad B = 0.7510, \quad C = 0.711, \quad D = 31.82$$
+$$A = 2.17, \quad B = 0.9093, \quad C = 0.733, \quad D = 31.45$$
 
-$$E_2^{\text{HW}} = 9.68$$
+$$E_2^{\text{HW}} = 8.87$$
 
-These guesses place $B$ at a higher frequency ($\pi/4 \approx 0.785$ rad/s, corresponding to a ~8-second oscillation period), which matches the visible short-period wiggles in the data better than $2\pi/30$. The optimizer converges to a qualitatively different — and lower-error — solution.
+These guesses start at a higher frequency ($\pi/4 \approx 0.785$ rad/s), a small amplitude, and a realistic intercept — matching the visible short-period oscillations and steady rise in the data. `fmin` converges to a physically meaningful solution with a meaningfully lower error.
 
-The **key lesson**: for nonlinear least squares, the initial guess dictates which local minimum the optimizer finds. A guess informed by close visual inspection of the data (short-period wiggles, small amplitude, rising mean) outperforms one built from the global data range.
+The **key lesson**: `fmin` (Nelder–Mead) performs no gradient descent; it explores the cost surface by evaluating a simplex of points. The simplex collapses around the nearest local minimum, so the initial guess entirely governs which minimum is found.
 
 ---
 
@@ -153,10 +161,10 @@ The **key lesson**: for nonlinear least squares, the initial guess dictates whic
 
 | Approach | $A$ | $B$ (rad/s) | $C$ | $D$ | $E_2$ |
 |----------|-----|-------------|-----|-----|-------|
-| Physics-inspired | 1.93 | 0.1346 | 0.879 | 29.68 | 11.98 |
-| HW guesses | −1.91 | 0.7510 | 0.711 | 31.82 | **9.68** |
+| Physics-inspired | 31.51 | ≈ 0.000 | 0.732 | 0.027 | 12.31 |
+| HW guesses | 2.17 | 0.909 | 0.733 | 31.45 | **8.87** |
 
-The homework guesses yield a **19% reduction in $E_2$** over the physics-inspired approach, despite the physics approach being "more systematic". This illustrates that domain knowledge must be applied at the right scale — the oscillations visible in the residuals are short-period, not 30-second-period.
+The homework guesses yield a **28% reduction in $E_2$** over the physics-inspired approach. The physics approach fails because the initial $A$ and $C$ guesses correspond to the full data range, not the actual oscillation amplitude, leading `fmin` to a degenerate local minimum.
 
 ---
 
@@ -164,7 +172,7 @@ The homework guesses yield a **19% reduction in $E_2$** over the physics-inspire
 
 ![Exercise II fits](exercise_2.png)
 
-The fine-grid curve ($t = 0 : 0.01 : 30$) for the homework guesses follows the upward velocity trend while capturing the smaller oscillatory structure.
+Each panel shows the side-by-side outcome of `fmin` from its respective starting point. The left panel (Strategy 1) shows the optimizer settling on a nearly linear fit with imperceptible oscillation. The right panel (Strategy 2) captures the rising trend **and** the short-period oscillations, yielding the lower $E_2$.
 
 ---
 
@@ -175,12 +183,12 @@ The fine-grid curve ($t = 0 : 0.01 : 30$) for the homework guesses follows the u
 | Ex I — Quadratic | `polyfit` / `polyval` | 13.13 |
 | Ex I — Cubic Spline | `CubicSpline` (interpolation) | 0.00 (exact) |
 | Ex I — Cosine | `curve_fit`, physics guesses | **6.13** |
-| Ex II — Cosine+Linear (physics) | `curve_fit`, physics guesses | 11.98 |
-| Ex II — Cosine+Linear (HW guesses) | `curve_fit`, HW guesses | **9.68** |
+| Ex II — Cosine+Linear (physics) | `fmin`, physics guesses | 12.31 |
+| Ex II — Cosine+Linear (HW guesses) | `fmin`, HW guesses | **8.87** |
 
 **Key takeaways:**
 
 1. **`polyfit`/`polyval`** give a closed-form least-squares solution for polynomial models and are robust to initial conditions — but polynomials are often the wrong model for physical data.
 2. **Spline interpolation passes through every point** (zero $E_2$ on training data), which is useful for smooth reconstruction but not for modelling or extrapolation.
-3. **Nonlinear least-squares via `curve_fit`** can fit physically meaningful models (cosine, cosine+trend) but is sensitive to initial guesses. Poor guesses → wrong local minimum → higher error.
-4. **Initial guess selection is model-specific**: for a daily cycle, the period is known (24 h) so $B = 2\pi/24$ is natural. For the velocity oscillation, the period must be read from the short-timescale structure, not the full data range.
+3. **`scipy.optimize.fmin`** (Nelder–Mead) minimises a user-defined cost function without gradients, making it flexible for any loss but highly sensitive to initial guesses — the simplex collapses around the nearest local minimum.
+4. **Initial guess selection is model-specific**: for a daily cycle, the period is known (24 h) so $B = 2\pi/24$ is natural. For the velocity oscillation, the period must be read from the short-timescale structure, not the full data range — and the guess for amplitude must match the *oscillation* amplitude, not the full data range.
